@@ -1,0 +1,18 @@
+int cur;
+int old;
+
+float foo;
+float bar;
+
+int main(){
+
+    old = 5;
+    cur = old;
+    print(cur);
+
+    foo = 2.5;
+    bar = foo; 
+    print(bar);
+
+    return 0;
+}

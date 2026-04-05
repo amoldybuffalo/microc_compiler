@@ -1,0 +1,11 @@
+float foo;
+
+
+int main() {
+
+	foo = -2.5;
+
+    print(foo);
+
+	return 0;
+}

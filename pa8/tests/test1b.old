@@ -1,0 +1,10 @@
+int cur;
+int old;
+
+int main(){
+
+    old = 5;
+    cur = old;
+
+    return 0;
+}

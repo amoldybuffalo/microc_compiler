@@ -1,0 +1,12 @@
+int cur;
+float old;
+
+int main() {
+
+	old = 5.5;
+	cur = 7;
+	print(cur);
+	print(old);
+
+	return 0;
+}
