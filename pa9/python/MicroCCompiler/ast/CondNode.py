@@ -16,17 +16,17 @@ class CondNode(ASTNode):
 
   def getOpFromString(self, op: str):
     if op == '==':
-      return OpType.EQ # these should have self I think or maybe 
+      return self.OpType.EQ # these should have self I think or maybe 
     elif op == '!=':
-      return OpType.NE
+      return self.OpType.NE
     elif op == '<':
-      return OpType.LT
+      return self.OpType.LT
     elif op == '<=':
-      return OpType.LE
+      return self.OpType.LE
     elif op == '>':
-      return OpType.GT
+      return self.OpType.GT
     elif op == '>=':
-      return OpType.GE
+      return self.OpType.GE
     else:
       raise Exception("invalid op in CondNode")
 
@@ -57,18 +57,18 @@ class CondNode(ASTNode):
     self.oc = op
  
   def getReversedOp(self, op: OpType) -> OpType: # just OpType?
-    if op == OpType.LE:
-      return OpType.GT
-    elif op == OpType.LT:
-      return OpType.GE
-    elif op == OpType.GE:
-      return OpType.LT
-    elif op == OpType.GT:
-      return OpType.LE
-    elif op == OpType.EQ:
-      return OpType.NE
-    elif op == OpType.NE:
-      return OpType.EQ
+    if op == self.OpType.LE:
+      return self.OpType.GT
+    elif op == self.OpType.LT:
+      return self.OpType.GE
+    elif op == self.OpType.GE:
+      return self.OpType.LT
+    elif op == self.OpType.GT:
+      return self.OpType.LE
+    elif op == self.OpType.EQ:
+      return self.OpType.NE
+    elif op == self.OpType.NE:
+      return self.OpType.EQ
     else:
       raise Exception("Bad op type")
 

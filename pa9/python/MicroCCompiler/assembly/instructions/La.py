@@ -8,6 +8,6 @@ class La(Instruction):
     self.oc = OpCode.LA
 
   def __str__(self):
-    #return str(self.oc) + " " + self.dest + ", " + ("{}".format(hex(int(self.label))))
-    return str(self.oc) + " " + self.dest + ", " + self.label
+    return str(self.oc) + " " + self.dest + ", " + ("{}".format(hex(int(self.label))))
+    #return str(self.oc) + " " + self.dest + ", " + self.label
 

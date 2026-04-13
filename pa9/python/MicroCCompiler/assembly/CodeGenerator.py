@@ -40,7 +40,13 @@ class CodeGenerator(AbstractASTVisitor):
     ''' 
     Copy from PA8
     '''
-    pass
+    sym = node.getSymbol()
+
+    co = CodeObject(sym)
+    co.lval = True
+    co.type = node.getType()
+
+    return co
 
 
 
@@ -49,8 +55,16 @@ class CodeGenerator(AbstractASTVisitor):
     ''' 
     Copy from PA8
     '''
-
     co = CodeObject()
+
+    temp = self.generateTemp(Scope.Type.INT)
+    val = node.getVal()
+    # LI t2, 5
+    co.code.append(Li(temp, val))
+    co.temp = temp
+    co.lval = False
+    co.type = node.getType()
+
 
     return co
 
@@ -61,9 +75,15 @@ class CodeGenerator(AbstractASTVisitor):
     '''
     co = CodeObject()
 
+    temp = self.generateTemp(Scope.Type.FLOAT)
+    val = node.getVal()
   
+    co.code.append(FImm(temp, val))
+    co.temp = temp
+    co.lval = False
+    co.type = node.getType()
+
     return co
-  
 
   def postprocessBinaryOpNode(self, node: BinaryOpNode, left: CodeObject, right: CodeObject) -> CodeObject:
     ''' 
@@ -151,6 +171,27 @@ class CodeGenerator(AbstractASTVisitor):
     '''
     co = CodeObject()  # Step 0
 
+    if expr.lval:
+      expr = self.rvalify(expr)
+
+    co.code.extend(expr.code) # Add in all the code required to get expr after rvalifying
+
+
+    if expr.type == Scope.Type.INT:
+      temp = self.generateTemp(Scope.Type.INT)
+      co.code.append(Neg(src=expr.temp, dest=temp))
+      
+
+    elif expr.type == Scope.Type.FLOAT:
+      temp = self.generateTemp(Scope.Type.FLOAT)
+      co.code.append(FNeg(src=expr.temp, dest=temp))
+
+    else:
+      raise Exception("Non int/float type in unary op!")
+
+    co.type = expr.type
+    co.temp = temp
+    co.lval = False 
 
     return co
 
@@ -159,7 +200,17 @@ class CodeGenerator(AbstractASTVisitor):
     Copy from PA8
     '''
     co = CodeObject()
-   
+    if right.lval:
+      right = self.rvalify(right)
+    co.code.extend(right.code)
+    assert(left.isVar())
+    temp = self.generateTemp(Scope.Type.INT)
+    co.code.append(La(temp, self.generateAddrFromVariable(left)))
+    if left.getType() == Scope.Type.FLOAT:
+      co.code.append(Fsw(right.temp, temp, "0"))
+    else:
+      co.code.append(Sw(right.temp, temp, "0"))
+
     return co
 
   def postprocessStatementListNode(self, node: StatementListNode, statements: list) -> CodeObject:
@@ -183,7 +234,29 @@ class CodeGenerator(AbstractASTVisitor):
     Copy from PA8
     '''
     co = CodeObject()
-    
+
+    assert(var.isVar())
+
+    if var.type is Scope.Type.INT:
+      temp = self.generateTemp(Scope.Type.INT)
+      co.code.append(GetI(temp))
+      address = self.generateAddrFromVariable(var)
+      temp2 = self.generateTemp(Scope.Type.INT)
+      co.code.append(La(temp2, address))
+      co.code.append(Sw(temp, temp2, '0'))
+
+    elif var.type is Scope.Type.FLOAT:
+      temp = self.generateTemp(Scope.Type.FLOAT)
+      co.code.append(GetF(temp))
+      address = self.generateAddrFromVariable(var)
+      temp2 = self.generateTemp(Scope.Type.INT)
+      co.code.append(La(temp2, address))
+      co.code.append(Fsw(temp, temp2, '0'))
+
+    else:
+      raise Exception("Bad type in read node")
+
+
     return co
 	 
 
@@ -192,6 +265,21 @@ class CodeGenerator(AbstractASTVisitor):
     Copy from PA8
     '''
     co = CodeObject()
+    if expr.lval:
+      expr = self.rvalify(expr)
+
+    co.code.extend(expr.code)
+
+
+    if expr.type is Scope.Type.INT:
+      co.code.append(PutI(expr.temp))
+
+    elif expr.type is Scope.Type.FLOAT:
+      co.code.append(PutF(expr.temp))
+
+    elif expr.type is Scope.Type.STRING:
+      co.code.append(PutS(expr.temp))
+
     return co
 
 
@@ -201,9 +289,17 @@ class CodeGenerator(AbstractASTVisitor):
     '''
     NEW:
     '''
-    node.setOp(node.getReversedOp(node.getOp())) # Reverse comparison type
-    
+    node.setOp(node.getReversedOp(node.getOpFromString(node.getOp()))) # Reverse comparison type
+    if left.lval:
+      left = self.rvalify(left)
+    if right.lval:
+      right = self.rvalify(right)
+    node.setLeft(left)
+    node.setRight(right)
     co = CodeObject()
+    co.code.extend(left.code)
+    co.code.extend(right.code)
+    
     return co
 
 
@@ -213,10 +309,66 @@ class CodeGenerator(AbstractASTVisitor):
     '''
     NEW
     '''
+    
     self._incrnumCtrlStruct()
     labelnum = self._getnumCtrlStruct()
-    
+   
     co = CodeObject()
+    co.code.extend(cond.code)
+
+    expression = node.getCondExpr()
+    left = expression.left
+    right = expression.right
+
+    left_temp = left.temp
+    right_temp = right.temp
+
+
+    expression_string = str(expression.getOp())
+    if left.type == Scope.Type.FLOAT:
+      temp = self.generateTemp(Scope.Type.INT)
+      if expression_string == "OpType.LT":
+        co.code.append(Flt(left_temp, right_temp, temp))
+        co.code.append(Bne(temp, "x0", f"else{labelnum}"))
+      elif expression_string == "OpType.GT":
+        co.code.append(Fle(right_temp, left_temp, temp))
+        co.code.append(Beq(temp, "x0", f"else{labelnum}"))
+      elif expression_string == "OpType.EQ":
+        co.code.append(Feq(left_temp, right_temp, temp))
+        co.code.append(Bne(temp, "x0", f"else{labelnum}"))
+      elif expression_string == "OpType.NE":
+        co.code.append(Feq(left_temp, right_temp, temp))
+        co.code.append(Beq(temp, "x0", f"else{labelnum}"))
+      elif expression_string == "OpType.LE":
+        co.code.append(Fle(left_temp, right_temp, temp))
+        co.code.append(Bne(temp, "x0", f"else{labelnum}"))
+      elif expression_string == "OpType.GE":
+        co.code.append(Flt(left_temp, right_temp, temp))
+        co.code.append(Beq(temp, "x0", f"else{labelnum}"))
+
+      
+
+    else:
+      if expression_string == "OpType.LT":
+        co.code.append(Blt(left_temp, right_temp, f"else{labelnum}"))
+      elif expression_string == "OpType.GT":
+        co.code.append(Bgt(left_temp, right_temp, f"else{labelnum}"))
+      elif expression_string == "OpType.EQ":
+        co.code.append(Beq(left_temp, right_temp,f"else{labelnum}" ))
+      elif expression_string == "OpType.NE":
+        co.code.append(Bne(left_temp, right_temp, f"else{labelnum}" ))
+      elif expression_string == "OpType.LE":
+        co.code.append(Ble(left_temp, right_temp, f"else{labelnum}" ))
+      elif expression_string == "OpType.GE":
+        co.code.append(Bge(left_temp, right_temp, f"else{labelnum}" ))
+
+    co.code.append(tlist.code)
+    co.code.append(J(f"done{labelnum}"))
+    
+    co.code.append(Label(f"else{labelnum}")) #keeping the else label no matter what for reasons
+    if not (elist is None):
+      co.code.append(elist.code) 
+    co.code.append(Label(f"done{labelnum}"))
     
     return co
 
@@ -230,6 +382,56 @@ class CodeGenerator(AbstractASTVisitor):
     self._incrnumCtrlStruct()
     labelnum = self._getnumCtrlStruct()
     co = CodeObject()
+    co.code.append(Label(f"while{labelnum}"))
+    co.code.extend(cond.code)
+
+   
+    expression = node.getCond()
+    left = expression.left
+    right = expression.right
+
+    left_temp = left.temp
+    right_temp = right.temp
+
+    expression_string = str(expression.getOp())
+    if left.type == Scope.Type.FLOAT:
+      temp = self.generateTemp(Scope.Type.INT)
+      if expression_string == "OpType.LT":
+        co.code.append(Flt(left_temp, right_temp, temp))
+        co.code.append(Bne(temp, "x0", f"exit{labelnum}"))
+      elif expression_string == "OpType.GT":
+        co.code.append(Flt(left_temp, right_temp, temp))
+        co.code.append(Beq(temp, "x0", f"exit{labelnum}"))
+      elif expression_string == "OpType.EQ":
+        co.code.append(Feq(left_temp, right_temp, temp))
+        co.code.append(Bne(temp, "x0", f"exit{labelnum}"))
+      elif expression_string == "OpType.NE":
+        co.code.append(Feq(left_temp, right_temp, temp))
+        co.code.append(Beq(temp, "x0", f"exit{labelnum}"))
+      elif expression_string == "OpType.LE":
+        co.code.append(Fle(left_temp, right_temp, temp))
+        co.code.append(Bne(temp, "x0", f"exit{labelnum}"))
+      elif expression_string == "OpType.GE":
+        co.code.append(Fle(left_temp, right_temp, temp))
+        co.code.append(Beq(temp, "x0", f"exit{labelnum}")) 
+
+    else:
+      if expression_string == "OpType.LT":
+        co.code.append(Blt(left_temp, right_temp, f"exit{labelnum}"))
+      elif expression_string == "OpType.GT":
+        co.code.append(Bgt(left_temp, right_temp, f"exit{labelnum}"))
+      elif expression_string == "OpType.EQ":
+        co.code.append(Beq(left_temp, right_temp, f"exit{labelnum}" ))
+      elif expression_string == "OpType.NE":
+        co.code.append(Bne(left_temp, right_temp, f"exit{labelnum}" ))
+      elif expression_string == "OpType.LE":
+        co.code.append(Ble(left_temp, right_temp, f"exit{labelnum}" ))
+      elif expression_string == "OpType.GE":
+        co.code.append(Bge(left_temp, right_temp, f"exit{labelnum}" ))
+
+    co.code.extend(wlist.code)
+    co.code.append(J(f"while{labelnum}"))
+    co.code.append(Label(f"exit{labelnum}"))
 
     return co
   
@@ -242,8 +444,14 @@ class CodeGenerator(AbstractASTVisitor):
     '''
     co = CodeObject()
 
-  
+    if retExpr.lval is True:
+      retExpr = self.rvalify(retExpr)
+
+    co.code.extend(retExpr.code)
+    co.code.append(Halt())
+    co.type = None
     return co
+
 
   
   def generateTemp(self, t: Scope.Type) -> str:
@@ -268,7 +476,33 @@ class CodeGenerator(AbstractASTVisitor):
     '''
     Copy from PA8
     '''
+    assert(lco.lval is True)
+    assert(lco.isVar() is True)
+    
     co = CodeObject()
+
+    address = self.generateAddrFromVariable(lco)
+    temp1 = self.generateTemp(Scope.Type.INT) # Addresses are always ints
+    co.code.append(La(temp1, address)) # Load address (global only)
+
+    if lco.type is Scope.Type.INT:
+      temp2 = self.generateTemp(Scope.Type.INT)
+      co.code.append(Lw(temp2, temp1, '0'))
+
+    elif lco.type is Scope.Type.FLOAT:
+      temp2 = self.generateTemp(Scope.Type.FLOAT)
+      co.code.append(Flw(temp2, temp1, '0'))
+
+    elif lco.type is Scope.Type.STRING:
+      temp2 = temp1
+    else:
+      raise Exception("Bad type in rvalify!")
+
+    co.type = lco.type
+    co.lval = False
+    co.temp = temp2
+
+
     return co
     
   def generateAddrFromVariable(self, lco: CodeObject) -> str:
@@ -276,7 +510,12 @@ class CodeGenerator(AbstractASTVisitor):
     ''' 
     Copy from PA8
     '''
-    return "asdf"
+    assert(lco.isVar() is True)
+
+    symbol = lco.getSTE()   # Get symbol from symbol table
+    address = str(symbol.getAddress()) # Get address of variable
+
+    return address
   
 
 
